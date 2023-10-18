@@ -1,5 +1,4 @@
 
-
 # Sentence Classification
 
 Code to preprocess and classify annotated sentences in student texts with a CNN.
@@ -18,6 +17,7 @@ Folder structure
 │       ├── ...
 │       └── syn_I2
 ├── preprocessing.py
+├── main.py
 ├── nn
 │   └── train_model.py
 ├── requirements.txt
@@ -25,13 +25,15 @@ Folder structure
 └── .gitignore
 ```
 
-
-## Preprocessing
-
-Preprocess the data before training according to the flags, e.g.: \
-`$ python3 preprocessing.py data/raw --emp 1 2 3 --syn 1 2 --undersample`
-
-this saves train/test/val data from empirically annotated data from iterations 1-3 and synthetic data from iterations 1&2. The training set is under sampled such that the classes are balanced.
+## How to use the script
+Preprocess data specified in the command line arguments and train and evaluate the model with that data.
+E.g. the following prompt specifies that empirically annotated data from the first four iterations and synthetically
+generated data (ChatGPT) from the first two iterations will be used and the data will be undersampled to the
+size of the minority class:
+`$ python3 main.py data/raw --emp 1 2 3 4 --syn 1 2 --undersample`
+The following promt would just use data from the first three iterations of empirically annotated data without
+undersampling:
+`$ python3 main.py data/raw --emp 1 2 3`
 
 Flags in the preprocessing script:
 
@@ -42,13 +44,12 @@ Flags in the preprocessing script:
 |Undersampling          |`'--undersample'`|Undersample to the minority class?|
 
 
+## What this script does
+Preprocessing: Removing stop words, named entities.
+Classification: 10-way classification using a CNN.
 
-## Classification
-
-The script trains the model and evaluates the performance.\
-`$ python3 nn/train_model.py --emp 1 2 3 --syn 1 2`
 
 
 ## TODO
 - Modell trainieren, ev. verbessern
-- preprocessing und classification in einem main Skript zusammenführen 
+- Kreativeres Preprocessing

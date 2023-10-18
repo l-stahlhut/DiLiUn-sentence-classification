@@ -6,6 +6,7 @@ import spacy
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.utils import resample
+from typing import List, Dict, AnyStr
 
 nlp = spacy.load('de_core_news_md')
 
@@ -18,22 +19,22 @@ $ python3 preprocessing.py data/raw --emp 1 2 3 --syn 1 2 --undersample
 
 """
 
-parser = argparse.ArgumentParser(
-    prog='main',
-    description='Read annotated data, preprocess it, and train the model with it.')
-parser.add_argument('datapath', type=pathlib.Path, help='Path of raw training data, e.g. data/raw')
-parser.add_argument('-e', '--emp', nargs='+', help='List of Itertions of empirically annotated data to consider '
-                                                         'for training, e.g. "--emp 1 2" to consider data that was '
-                                                         'annotated in iterations 1 and 2.')
-parser.add_argument('-s', '--syn', nargs='+', help='List of Itertions of synthetically generated data to consider '
-                                                         'for training, e.g. "--syn 1 2" to consider data that was '
-                                                         'annotated in iterations 1 and 2.')
-parser.add_argument('-u', '--undersample', action='store_true', help='"True" to undersample data to minority class or '
-                                                                     '"False" to work with all data.')
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(
+#     prog='main',
+#     description='Read annotated data, preprocess it, and train the model with it.')
+# parser.add_argument('datapath', type=pathlib.Path, help='Path of raw training data, e.g. data/raw')
+# parser.add_argument('-e', '--emp', nargs='+', help='List of Itertions of empirically annotated data to consider '
+#                                                          'for training, e.g. "--emp 1 2" to consider data that was '
+#                                                          'annotated in iterations 1 and 2.')
+# parser.add_argument('-s', '--syn', nargs='+', help='List of Itertions of synthetically generated data to consider '
+#                                                          'for training, e.g. "--syn 1 2" to consider data that was '
+#                                                          'annotated in iterations 1 and 2.')
+# parser.add_argument('-u', '--undersample', action='store_true', help='"True" to undersample data to minority class or '
+#                                                                      '"False" to work with all data.')
+# args = parser.parse_args()
 
 
-def read_data(iterations: list) -> list[dict[str, list[str]]]:
+def read_data(iterations: List) -> List[Dict[AnyStr, List[AnyStr]]]:
     """Reads data according to the command line arguments.
     iterations: list of iterations (syn/emp) to consider, e.g.  ['syn_I1', 'syn_I2', 'syn_I3', 'emp_I1']
 
@@ -68,7 +69,7 @@ def read_data(iterations: list) -> list[dict[str, list[str]]]:
 
     return steps_dictionary
 
-def preprocess_text(phrases: list[str]) -> list[str]:
+def preprocess_text(phrases: List[AnyStr]) -> List[AnyStr]:
     """
     Preprocessing function from Anna.
     Performs preprocessing of the phrases. The preprocessing includes:
@@ -97,7 +98,7 @@ def preprocess_text(phrases: list[str]) -> list[str]:
         phrases_prepro.append(phrase_prepro)
     return phrases_prepro
 
-def data_to_df(steps_dictionary: list[dict[str, list[str]]]) -> pd.DataFrame:
+def data_to_df(steps_dictionary: List[Dict[AnyStr, List[AnyStr]]]) -> pd.DataFrame:
     """Create a df with class in onee column and string n the other"""
     data = {
         'class': [],
@@ -112,7 +113,7 @@ def data_to_df(steps_dictionary: list[dict[str, list[str]]]) -> pd.DataFrame:
 
     return df
 
-def train_test_split(df: pd.DataFrame, shortname:str) -> None:
+def train_test_split(df: pd.DataFrame, shortname:AnyStr, args_undersample) -> None:
     """Data split of dataframe (80/10/10 for train/test/val)"""
     # create folder
     if not os.path.exists(os.path.join('data/intermediate', shortname)):
@@ -128,7 +129,7 @@ def train_test_split(df: pd.DataFrame, shortname:str) -> None:
     test = rest.drop(index=val.index)
 
     # undersample train data
-    if args.undersample:
+    if args_undersample:
         train = undersample_train_data(train)
 
     # write to csv
@@ -154,39 +155,39 @@ def undersample_train_data(train_data: pd.DataFrame) -> pd.DataFrame:
     train_data = balanced_data
 
     return train_data
-
-def main():
-    # Chose which data to work with
-    print('emp'+''.join(args.emp))
-    # print('emp' + ''.join(args.emp) + '_syn' + ''.join(args.syn))
-    if args.emp is not None:
-        print("Working with the following data:\n- empirically annotated data from iterations ", args.emp)
-        iterations = ["emp_I"+x for x in args.emp]
-        shortname = 'emp'+''.join(args.emp)
-        if args.syn is not None:
-            print("- synthetic data from iterations ", args.syn)
-            paths_synthetic = ["syn_I" + x for x in args.syn]
-            iterations = paths_synthetic + iterations
-            shortname = shortname + '_syn' + ''.join(args.syn)
-            print("-> Working with the following data for a mixed approach: ", iterations)
-            print("Shortname for saving preprocessed data: ", shortname)
-        else:
-            print("-> Working with empirically annotated data only (no mixed approach): ", iterations)
-    else:
-        print("Please specify which iterations of the empirical data to work with.")
-
-    # read and preprocess data, save as csv in data/intermediate
-    print("Preprocessing texts...")
-    steps_dictionary = read_data(iterations)
-    df = data_to_df(steps_dictionary)
-    print("Preprocessing finished.")
-    value_counts = df['class'].value_counts().reset_index()
-    print("\nNumber of sentences per class:\n", value_counts)
-    print("\nSplitting dataset into train, test, val...")
-    train, test, val = train_test_split(df, shortname)
-    print("Data split complete.\n\nNumber of sentences per class in train data (after optional undersampling)"
-          ":\n", train['class'].value_counts().reset_index())
-
-
-if __name__ == '__main__':
-    main()
+#
+# def main():
+#     # Chose which data to work with
+#     print('emp'+''.join(args.emp))
+#     # print('emp' + ''.join(args.emp) + '_syn' + ''.join(args.syn))
+#     if args.emp is not None:
+#         print("Working with the following data:\n- empirically annotated data from iterations ", args.emp)
+#         iterations = ["emp_I"+x for x in args.emp]
+#         shortname = 'emp'+''.join(args.emp)
+#         if args.syn is not None:
+#             print("- synthetic data from iterations ", args.syn)
+#             paths_synthetic = ["syn_I" + x for x in args.syn]
+#             iterations = paths_synthetic + iterations
+#             shortname = shortname + '_syn' + ''.join(args.syn)
+#             print("-> Working with the following data for a mixed approach: ", iterations)
+#             print("Shortname for saving preprocessed data: ", shortname)
+#         else:
+#             print("-> Working with empirically annotated data only (no mixed approach): ", iterations)
+#     else:
+#         print("Please specify which iterations of the empirical data to work with.")
+#
+#     # read and preprocess data, save as csv in data/intermediate
+#     print("Preprocessing texts...")
+#     steps_dictionary = read_data(iterations)
+#     df = data_to_df(steps_dictionary)
+#     print("Preprocessing finished.")
+#     value_counts = df['class'].value_counts().reset_index()
+#     print("\nNumber of sentences per class:\n", value_counts)
+#     print("\nSplitting dataset into train, test, val...")
+#     train, test, val = train_test_split(df, shortname)
+#     print("Data split complete.\n\nNumber of sentences per class in train data (after optional undersampling)"
+#           ":\n", train['class'].value_counts().reset_index())
+#
+#
+# if __name__ == '__main__':
+#     main()

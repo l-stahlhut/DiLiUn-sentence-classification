@@ -12,18 +12,18 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 
 print("gpu support", tf.config.list_physical_devices('GPU'))
-
-parser = argparse.ArgumentParser(
-    prog='main',
-    description='Read annotated data, preprocess it, and train the model with it.')
-parser.add_argument('-e', '--emp', nargs='+', help='List of Itertions of empirically annotated data to consider '
-                                                         'for training, e.g. "--emp 1 2" to consider data that was '
-                                                         'annotated in iterations 1 and 2.')
-parser.add_argument('-s', '--syn', nargs='+', help='List of Itertions of synthetically generated data to consider '
-                                                         'for training, e.g. "--syn 1 2" to consider data that was '
-                                                         'annotated in iterations 1 and 2.')
-
-args = parser.parse_args()
+#
+# parser = argparse.ArgumentParser(
+#     prog='main',
+#     description='Read annotated data, preprocess it, and train the model with it.')
+# parser.add_argument('-e', '--emp', nargs='+', help='List of Itertions of empirically annotated data to consider '
+#                                                          'for training, e.g. "--emp 1 2" to consider data that was '
+#                                                          'annotated in iterations 1 and 2.')
+# parser.add_argument('-s', '--syn', nargs='+', help='List of Itertions of synthetically generated data to consider '
+#                                                          'for training, e.g. "--syn 1 2" to consider data that was '
+#                                                          'annotated in iterations 1 and 2.')
+#
+# args = parser.parse_args()
 
 
 class Dataset:
@@ -117,7 +117,8 @@ def train_model(
         labels_train,
         sentences_val, # sentences_val_padded2
         labels_val,
-        model_name
+        model_name,
+        dataset,
     ):
     history = model.fit(sentences_train, labels_train,
                             epochs=5,
@@ -126,14 +127,14 @@ def train_model(
 
     # check for overfitting
     print("Check for overfitting...")
-    plot_result(history)
+    plot_result(history, dataset)
 
     # save model to a file
     if not os.path.exists("nn/models"):
         os.makedirs("nn/models")
     model.save(os.path.join("nn/models", model_name + ".h5"))
 
-def plot_result(history):
+def plot_result(history, dataset):
     """Plot train and val loss during training."""
     plt.plot(history.history['accuracy'], label ="Training accuracy")
     plt.plot(history.history['val_accuracy'], label ="Validation accuracy")
@@ -142,7 +143,13 @@ def plot_result(history):
     plt.xlabel("Epoch")
     plt.legend()
     plt.show()
-    return plt
+
+    # save plot to file
+    if not os.path.exists(os.path.join("nn/reports", dataset)):
+        os.makedirs(os.path.join("nn/reports", dataset))
+    plt.savefig(os.path.join("nn/reports", dataset, "val_loss.png"))
+    #return plt
+    return None
 
 def evaluation_report(model, X_test, y_true, dataset):
     """Returns classification report for a ten-way classification model.
@@ -168,7 +175,7 @@ def evaluation_report(model, X_test, y_true, dataset):
     print(report)
 
     # save to a file
-    if not os.path.exists("nn/reports"):
+    if not os.path.exists(os.path.join("nn/reports", dataset)):
         os.makedirs(os.path.join("nn/reports", dataset))
     with open(os.path.join("nn/reports", dataset, "evaluation_report.txt"), 'w') as file:
         file.write(report)
@@ -218,48 +225,48 @@ def plot_confusion_matrix(model, X_test, y_test, dataset):
     plt.savefig(os.path.join("nn/reports", dataset, "confusion_matrix.png"))
 
 
-def main():
-    # Get path for specified dataset version from command line arguments
-    # empirical data is mandatory, mixed is optional
-    if args.emp is not None:
-        dataset = 'emp' + ''.join(args.emp)
-        if args.syn is not None:
-            dataset = dataset + '_syn' + ''.join(args.syn)
-    else:
-        print("Please specify which data to work with.")
-
-    dataset_path = os.path.join('./data/intermediate', dataset)
-    print("Working with the data saved in: {}".format(dataset_path))
-
-    # get dataset
-    D = Dataset(dataset_path)
-
-    # create model
-    model = get_nn_model(
-        D.sentences_train_padded.shape[1],  # sentences_train_padded.shape[1]
-        D.sentences_train_padded.shape[2],  # sentences_train_padded.shape[2]
-        num_classes=10,
-    )
-
-    # train model
-    train_model(
-        model,
-        D.sentences_train_padded,  # sentences_train_padded
-        D.labels_train,
-        D.sentences_val_padded,  # sentences_val_padded2
-        D.labels_val,
-        model_name="model_" + dataset,  # e.g. model_emp123 -> shows which dataset it was trained with
-    )
-
-    # evaluate model
-    evaluation_report(model, D.sentences_test_padded, D.labels_test, dataset)
-    # confusion matrix
-    plot_confusion_matrix(model, D.sentences_test_padded, D.labels_test, dataset)
-
-
-
-if __name__ == "__main__":
-    main()
+# def main():
+#     # Get path for specified dataset version from command line arguments
+#     # empirical data is mandatory, mixed is optional
+#     if args.emp is not None:
+#         dataset = 'emp' + ''.join(args.emp)
+#         if args.syn is not None:
+#             dataset = dataset + '_syn' + ''.join(args.syn)
+#     else:
+#         print("Please specify which data to work with.")
+#
+#     dataset_path = os.path.join('./data/intermediate', dataset)
+#     print("Working with the data saved in: {}".format(dataset_path))
+#
+#     # get dataset
+#     D = Dataset(dataset_path)
+#
+#     # create model
+#     model = get_nn_model(
+#         D.sentences_train_padded.shape[1],  # sentences_train_padded.shape[1]
+#         D.sentences_train_padded.shape[2],  # sentences_train_padded.shape[2]
+#         num_classes=10,
+#     )
+#
+#     # train model
+#     train_model(
+#         model,
+#         D.sentences_train_padded,  # sentences_train_padded
+#         D.labels_train,
+#         D.sentences_val_padded,  # sentences_val_padded2
+#         D.labels_val,
+#         model_name="model_" + dataset,  # e.g. model_emp123 -> shows which dataset it was trained with
+#     )
+#
+#     # evaluate model
+#     evaluation_report(model, D.sentences_test_padded, D.labels_test, dataset)
+#     # confusion matrix
+#     plot_confusion_matrix(model, D.sentences_test_padded, D.labels_test, dataset)
+#
+#
+#
+# if __name__ == "__main__":
+#     main()
 
 
 
