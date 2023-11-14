@@ -3,7 +3,8 @@ import os
 import sys
 import pathlib
 from preprocessing import read_data, preprocess_text, data_to_df, train_test_split, undersample_train_data
-from nn.train_model import Dataset, get_nn_model, train_model, plot_result, evaluation_report, plot_confusion_matrix
+from nn.train_model import Dataset, get_nn_model, train_model, plot_result, evaluation_report, plot_confusion_matrix, save_classified_test_sents
+
 
 """
 How to use the script
@@ -81,7 +82,7 @@ def main():
         else:
             print("Please specify which data to work with.")
 
-        dataset_path = os.path.join('./data/intermediate', dataset)
+        dataset_path = os.path.join('data/intermediate_old', dataset)
         print("Working with the data saved in: {}".format(dataset_path))
 
     # Reset the standard output back to the terminal
@@ -89,6 +90,18 @@ def main():
 
     # get dataset
     D = Dataset(dataset_path)
+    # print(D.sentences_train_raw[0:2])
+    # print(D.sentences_train[0:2])
+    # print(D.labels_train[0:2])
+    # print('\n\n')
+    # print(D.sentences_test_raw[0:2])
+    # print(D.sentences_test[0:2])
+    # print(D.labels_test[0:2])
+
+    #todo delete the following lines
+    #print(D.sentences_test)
+    # for x, y in zip(D.labels_test, D.labels_test_mapped):
+    #     print(x, '\t', y)
 
     # create model
     model = get_nn_model(
@@ -112,6 +125,8 @@ def main():
     evaluation_report(model, D.sentences_test_padded, D.labels_test, dataset)
     # confusion matrix
     plot_confusion_matrix(model, D.sentences_test_padded, D.labels_test, dataset)
+    # save classified sentences
+    save_classified_test_sents(model, dataset, D.sentences_test_raw, D.sentences_test, D.sentences_test_padded, D.labels_test)
 
 if __name__ == '__main__':
     main()

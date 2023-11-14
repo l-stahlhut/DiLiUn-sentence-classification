@@ -18,7 +18,7 @@ without undersampling:
 $ python3 preprocessing.py data/raw --emp 1 2 3 --syn 1 2 --undersample
 
 """
-
+#
 # parser = argparse.ArgumentParser(
 #     prog='main',
 #     description='Read annotated data, preprocess it, and train the model with it.')
@@ -40,7 +40,8 @@ def read_data(iterations: List) -> List[Dict[AnyStr, List[AnyStr]]]:
 
     Returns a dictionary with steps as keys and preprocessed sentences as values."""
     data_paths = [os.path.join('data/raw', step) for step in iterations]
-    steps = ["no_step", "step1c", "step1d", "step1e", "step2a", "step2c", "step3a", "step3b", "step3d", "step3e",
+    # i merged 3e and 3d into 3d
+    steps = ["no_step", "step1c", "step1d", "step1e", "step2a", "step2c", "step3a", "step3b", "step3d",
              "step3g"]
     steps_dictionary = {"no_step": [],
              "step1c": [],
@@ -51,7 +52,6 @@ def read_data(iterations: List) -> List[Dict[AnyStr, List[AnyStr]]]:
              "step3a": [],
              "step3b": [],
              "step3d": [],
-             "step3e": [],
              "step3g": []}
 
     for path in data_paths:
@@ -61,10 +61,10 @@ def read_data(iterations: List) -> List[Dict[AnyStr, List[AnyStr]]]:
                 with open(filepath, 'r') as f:
                     lines = f.readlines()
                     lines = [l.rstrip('\n') for l in lines if l != '\n' and not l[0].isdigit()]  # exclude titles
-                    lines = preprocess_text(lines) # apply annas preprocessing
+                    #lines = preprocess_text(lines) # apply annas  preprocessing # todo in train_model verschieben
                     steps_dictionary[step].extend(lines)
             except FileNotFoundError:
-                # print("File ", filepath, "does not exist.")
+                print("File ", filepath, "does not exist.")
                 pass
 
     return steps_dictionary
@@ -96,7 +96,8 @@ def preprocess_text(phrases: List[AnyStr]) -> List[AnyStr]:
         phrase_prepro = ' '.join(tokens_prepro)
         phrase_prepro = re.sub(r'[0-9]', '', phrase_prepro)
         phrases_prepro.append(phrase_prepro)
-    return phrases_prepro
+    return phrases
+    #return phrases_prepro todo!
 
 def data_to_df(steps_dictionary: List[Dict[AnyStr, List[AnyStr]]]) -> pd.DataFrame:
     """Create a df with class in onee column and string n the other"""
@@ -116,8 +117,8 @@ def data_to_df(steps_dictionary: List[Dict[AnyStr, List[AnyStr]]]) -> pd.DataFra
 def train_test_split(df: pd.DataFrame, shortname:AnyStr, args_undersample) -> None:
     """Data split of dataframe (80/10/10 for train/test/val)"""
     # create folder
-    if not os.path.exists(os.path.join('data/intermediate', shortname)):
-        os.makedirs(os.path.join('data/intermediate', shortname))
+    if not os.path.exists(os.path.join('data/intermediate_old', shortname)):
+        os.makedirs(os.path.join('data/intermediate_old', shortname))
 
     #df = pd.read_csv(df) # uncomment in case you're reading a file (not df)
     # get random sample for test
@@ -133,9 +134,9 @@ def train_test_split(df: pd.DataFrame, shortname:AnyStr, args_undersample) -> No
         train = undersample_train_data(train)
 
     # write to csv
-    train.to_csv(os.path.join('data/intermediate', shortname, 'train.csv'), index=False)
-    test.to_csv(os.path.join('data/intermediate', shortname, 'test.csv'), index=False)
-    val.to_csv(os.path.join('data/intermediate', shortname, 'val.csv'), index=False)
+    train.to_csv(os.path.join('data/intermediate_old', shortname, 'train.csv'), index=False)
+    test.to_csv(os.path.join('data/intermediate_old', shortname, 'test.csv'), index=False)
+    val.to_csv(os.path.join('data/intermediate_old', shortname, 'val.csv'), index=False)
 
     return train, test, val
 
@@ -155,7 +156,8 @@ def undersample_train_data(train_data: pd.DataFrame) -> pd.DataFrame:
     train_data = balanced_data
 
     return train_data
-#
+
+
 # def main():
 #     # Chose which data to work with
 #     print('emp'+''.join(args.emp))
@@ -179,7 +181,12 @@ def undersample_train_data(train_data: pd.DataFrame) -> pd.DataFrame:
 #     # read and preprocess data, save as csv in data/intermediate
 #     print("Preprocessing texts...")
 #     steps_dictionary = read_data(iterations)
+#     print("Number of sentences per class after data cleaning, before data split and undersampling")
+#     for k, v in steps_dictionary.items():
+#         print(k, len(v))
+#
 #     df = data_to_df(steps_dictionary)
+#     print(train_test_split(df, shortname).value_counts) # todo remove
 #     print("Preprocessing finished.")
 #     value_counts = df['class'].value_counts().reset_index()
 #     print("\nNumber of sentences per class:\n", value_counts)

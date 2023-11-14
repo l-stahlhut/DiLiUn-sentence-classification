@@ -10,6 +10,10 @@ from transformers import AutoTokenizer, TFAutoModel
 import seaborn as sns
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
+import re
+import spacy
+
+nlp = spacy.load('de_core_news_md')
 
 print("gpu support", tf.config.list_physical_devices('GPU'))
 #
@@ -36,13 +40,17 @@ class Dataset:
         self.test = pd.read_csv(os.path.join(data_path, "test.csv"), encoding='utf8',
                                 dtype={'text_id': str, 'sentence': str, 'label': str}, index_col=False).dropna()
         # save list of sentences and series of corresponding labels
-        self.sentences_train, self.labels_train = self.get_target_sentence(self.train)
-        self.sentences_val, self.labels_val = self.get_target_sentence(self.val)
-        self.sentences_test, self.labels_test = self.get_target_sentence(self.test)
+        self.sentences_train_raw, self.labels_train = self.get_target_sentence(self.train)
+        self.sentences_val_raw, self.labels_val = self.get_target_sentence(self.val)
+        self.sentences_test_raw, self.labels_test = self.get_target_sentence(self.test)
         # map labels to integers
         self.labels_train = self.map_labels(self.labels_train)
         self.labels_val = self.map_labels(self.labels_val)
         self.labels_test = self.map_labels(self.labels_test)
+        # preprocess sentences
+        self.sentences_train = self.preprocess_sents(self.sentences_train_raw)
+        self.sentences_val = self.preprocess_sents(self.sentences_val_raw)
+        self.sentences_test = self.preprocess_sents(self.sentences_test_raw)
         # encode data
         # specify model and tokenizer
         self.model_name = "deepset/gbert-large"
@@ -74,6 +82,36 @@ class Dataset:
       sentences = df["sentence"].to_list()
       return sentences, labels
 
+    def preprocess_sents(self, phrases):
+        """
+        Preprocessing function from Anna.
+        Performs preprocessing of the phrases. The preprocessing includes:
+        - lemmatization
+        - removing stopwords
+        - removing OOV words
+        - removing named entities
+        - removing custom stopwords
+        - removing numbers
+        :param phrases: a list of phrases to be pre-processed
+        :return: a list of pre-processed phrases
+        """
+        phrases_prepro = []
+        custom_stopwords = ['bzw', 'vgl', 'evt', 'evtl']
+        for ph in phrases:
+            ph_wo_punct = re.sub(r'[^\w\s]', '', ph)
+            phrase = nlp(ph_wo_punct)
+            tokens = [tok for tok in phrase]
+            tokens_prepro = [tok for tok in tokens if tok.is_stop is False]
+            tokens_prepro = [tok for tok in tokens_prepro if tok.is_oov is False]
+            tokens_prepro = [tok for tok in tokens_prepro if tok.text not in [ne.text for ne in phrase.ents]]
+            tokens_prepro = [tok for tok in tokens_prepro if tok.text not in custom_stopwords]
+            tokens_prepro = [tok.lemma_ for tok in tokens_prepro]  # todo
+            phrase_prepro = ' '.join(tokens_prepro)
+            phrase_prepro = re.sub(r'[0-9]', '', phrase_prepro)
+            phrases_prepro.append(phrase_prepro)
+
+        return phrases_prepro
+
     def encode_data(self, sentences):
         # Tokenize the sentences using the tokenizer
         tokenized = self.tokenizer(sentences, padding=True, truncation=True, max_length=self.max_length,
@@ -84,6 +122,24 @@ class Dataset:
         return embeddings.numpy()
 
     def map_labels(self, labels):
+        """Map categorical labels to integers."""
+        label_to_int = {
+            "no_step": 0,
+            "step1c": 1,
+            "step1d": 2,
+            "step1e": 3,
+            "step2a": 4,
+            "step2c": 5,
+            "step3a": 6,
+            "step3b": 7,
+            "step3d": 8,
+            "step3g": 9
+        }
+        integer_labels = [label_to_int[label] for label in labels]
+        return pd.Series(integer_labels)
+
+
+    def map_labels_old(self, labels):
         """Map labels to integers."""
         label_to_int = {label: idx for idx, label in enumerate(set(labels))}
         integer_labels = [label_to_int[label] for label in labels]
@@ -121,13 +177,24 @@ def train_model(
         dataset,
     ):
     history = model.fit(sentences_train, labels_train,
-                            epochs=5,
+                            epochs=1,
                             batch_size=32,
                             validation_data=(sentences_val, labels_val))
 
-    # check for overfitting
+    # check for overfitting: validation loss plot
     print("Check for overfitting...")
-    plot_result(history, dataset)
+    # plot_result(history, dataset)
+    plt.plot(history.history['accuracy'], label="Training accuracy")
+    plt.plot(history.history['val_accuracy'], label="Validation accuracy")
+    plt.title("Model accuracy")
+    plt.ylabel("Accuracy")
+    plt.xlabel("Epoch")
+    plt.legend()
+
+    # save plot to file
+    if not os.path.exists(os.path.join("nn/reports", dataset)):
+        os.makedirs(os.path.join("nn/reports", dataset))
+    plt.savefig(os.path.join("nn/reports", dataset, "val_loss.png"))
 
     # save model to a file
     if not os.path.exists("nn/models"):
@@ -138,43 +205,48 @@ def plot_result(history, dataset):
     """Plot train and val loss during training."""
     plt.plot(history.history['accuracy'], label ="Training accuracy")
     plt.plot(history.history['val_accuracy'], label ="Validation accuracy")
-    plt.title("Accuracy of baseline model on step 3g")
+    plt.title("Model accuracy")
     plt.ylabel("Accuracy")
     plt.xlabel("Epoch")
     plt.legend()
-    plt.show()
+    # plt.show()
 
     # save plot to file
     if not os.path.exists(os.path.join("nn/reports", dataset)):
         os.makedirs(os.path.join("nn/reports", dataset))
     plt.savefig(os.path.join("nn/reports", dataset, "val_loss.png"))
-    #return plt
+
     return None
+
 
 def evaluation_report(model, X_test, y_true, dataset):
     """Returns classification report for a ten-way classification model.
-
     model = the model we want to evaluate;
     X_test = the test data;
-    y_true = true labels (e.g., [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).
+    y_true = true class labels (not numeric labels).
+    dataset = the name of the dataset.
     """
-    # accuracy
-    loss, accuracy = model.evaluate(X_test, y_true)
-    print('Test loss:', loss)
-    print('Test accuracy:', accuracy)
-    print("\n\n")
+    # # accuracy
+    # loss, accuracy = model.evaluate(X_test, y_true)
+    # print('Test loss:', loss) # todo delete?
+    # print('Test accuracy:', accuracy)
+    # print("\n")
 
-    # precision, accuracy, f1
     # Make predictions on the test data
     y_pred = model.predict(X_test)
-    y_pred_classes = np.argmax(y_pred, axis=1)  # Convert probabilities to class labels (0 to 9)
+    y_pred_classes = np.argmax(y_pred, axis=1)  # Convert probabilities to class labels (0 to 9) todo uncoment
 
-    report = classification_report(y_true, y_pred_classes)
+    # Create a list of class names in the same order as the numeric labels
+    class_names = ["no_step", "step1c", "step1d", "step1e", "step2a", "step2c", "step3a", "step3b", "step3d", "step3g"]
 
-    print("Evaluation report: ")
-    print(report)
+    # Generate a classification report with class names
+    report = classification_report(y_true, y_pred_classes, target_names=class_names)
+    #report = classification_report(y_true, y_pred, target_names=class_names)
 
-    # save to a file
+    # print("Evaluation report: ")
+    # print(report)
+
+    # Save the report to a file
     if not os.path.exists(os.path.join("nn/reports", dataset)):
         os.makedirs(os.path.join("nn/reports", dataset))
     with open(os.path.join("nn/reports", dataset, "evaluation_report.txt"), 'w') as file:
@@ -182,47 +254,89 @@ def evaluation_report(model, X_test, y_true, dataset):
 
     return None
 
-# confusion matrix
+
 def plot_confusion_matrix(model, X_test, y_test, dataset):
     y_pred = model.predict(X_test)
     y_pred_classes = np.argmax(y_pred, axis=1)  # Convert probabilities to class labels
     y_true = y_test.to_numpy()
-    true_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-    # Create the confusion matrix
-    #cm10 = confusion_matrix(y_true, y_pred_classes, y_test=true_labels)
-    cm10 = confusion_matrix(y_true, y_pred_classes)
-
 
     # Modify the label dictionary to include all ten classes
-    new_label_dict = {
-      0: "no_step",
-      1: "step_1c",
-      2: "step_1d",
-      3: "step_1e",
-      4: "step_2a",
-      5: "step_2c",
-      6: "step_3a",
-      7: "step_3b",
-      8: "step_3d",
-      9: "step_3g"
+    label_dict = {
+        0: "no_step",
+        1: "step1c",
+        2: "step1d",
+        3: "step1e",
+        4: "step2a",
+        5: "step2c",
+        6: "step3a",
+        7: "step3b",
+        8: "step3d",
+        9: "step3g"
     }
 
+    # Create the confusion matrix using the label names
+    cm = confusion_matrix(y_true, y_pred_classes)
+
     # Set up the heatmap
-    sns.set(font_scale=1.5)
-    fontdict = {'fontsize': 20}
-    ax = sns.heatmap(cm10, cmap=plt.cm.Blues, annot=True, fmt='d', xticklabels=true_labels, yticklabels=true_labels, cbar_kws={'label': 'Count'}, annot_kws={"size": 16})
+    sns.set(font_scale=1.0) # todo adjust font size
+    fontdict = {'fontsize': 8}
+    ax = sns.heatmap(cm, cmap=plt.cm.Blues, annot=True, fmt='d', xticklabels=label_dict.values(), yticklabels=label_dict.values(), cbar_kws={'label': 'Count'}, annot_kws={"size": 16})
+
+    # ax = sns.heatmap(cm, annot=True, fmt='d', xticklabels=label_dict.values(), yticklabels=label_dict.values(), cbar_kws={'label': 'Count'}, annot_kws={"size": 16})
+    # ax = sns.heatmap(cm, annot=True)
+
 
     ax.set_xlabel('Predicted Step', fontdict=fontdict)
     ax.set_ylabel('Actual Step', fontdict=fontdict)
     ax.set_title('Confusion Matrix CNN, Ten-Way Classification')
     ax.tick_params(axis='both', which='major', labelsize=12)
-    #plt.show()
+    # plt.show()
 
-    # save plot to file
-    if not os.path.exists("nn/reports"):
+    # Save plot to file
+    if not os.path.exists(os.path.join("nn/reports", dataset)):
         os.makedirs(os.path.join("nn/reports", dataset))
-    plt.savefig(os.path.join("nn/reports", dataset, "confusion_matrix.png"))
+    # # plt.savefig(os.path.join("nn/reports", dataset, "confusion_matrix.png")) # todo delete
+    ax.figure.savefig(os.path.join("nn/reports", dataset, "confusion_matrix.png"))
+    # ax.figure.savefig("output.png")
+
+
+def save_classified_test_sents(model, dataset, test_sents_raw, test_sents_preprocessed, X_test, y_test):
+    y_pred = model.predict(X_test)
+    y_pred_classes = np.argmax(y_pred, axis=1)  # Convert probabilities to class labels
+    y_true = y_test.to_numpy()
+
+    label_dict = {
+        0: "no_step",
+        1: "step1c",
+        2: "step1d",
+        3: "step1e",
+        4: "step2a",
+        5: "step2c",
+        6: "step3a",
+        7: "step3b",
+        8: "step3d",
+        9: "step3g"
+    }
+
+    y_true = [label_dict[label] for label in y_true]
+    y_pred_classes = [label_dict[label] for label in y_pred_classes]
+
+    # turn relevant columns into d and pd dataframe
+    d = {
+        'Raw test sentence': test_sents_raw,
+        'Preprocessed test sentence': test_sents_preprocessed,
+        'True label': y_true,
+        'Predicted label': y_pred_classes
+    }
+    df = pd.DataFrame(d)
+
+    # save as csv
+    if not os.path.exists(os.path.join("nn/reports", dataset)):
+        os.makedirs(os.path.join("nn/reports", dataset))
+    df.to_csv(os.path.join("nn/reports", dataset, "classified_sentences.csv"), sep='\t', encoding='utf-8')
+
+    return df.head()
+
 
 
 # def main():
